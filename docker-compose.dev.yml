@@ -1,8 +1,6 @@
 services:
   filamentprofiles:
-    image: ghcr.io/cori/filament-profiles:main
-    # For local development, comment out image and uncomment build:
-    # build: .
+    build: .
     restart: unless-stopped
     ports:
       - "7920:8000"

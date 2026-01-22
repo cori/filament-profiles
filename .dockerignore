@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+.tox
+.venv
+venv
+env
+
+# Node (for frontend build caching)
+frontend/node_modules
+frontend/dist
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# Docs
+*.md
+!README.md
+
+# Tests (not needed in prod image)
+tests
+
+# Local data
+*.db
+*.sqlite3
+data

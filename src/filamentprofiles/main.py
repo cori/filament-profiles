@@ -1,7 +1,12 @@
 """FastAPI application entry point."""
 
-from fastapi import FastAPI
+import os
+from pathlib import Path
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from filamentprofiles import __version__
 from filamentprofiles.api import export, filaments, machines, plates, profiles
@@ -29,13 +34,29 @@ app.include_router(profiles.router, prefix="/api/profiles", tags=["profiles"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
 
 
-@app.get("/")
-def root() -> dict[str, str]:
-    """Root endpoint returning API info."""
-    return {"name": "FilamentProfiles", "version": __version__}
-
-
 @app.get("/health")
 def health() -> dict[str, str]:
     """Health check endpoint."""
     return {"status": "healthy"}
+
+
+# Serve static frontend files if available
+STATIC_DIR = Path("/app/static")
+if STATIC_DIR.exists():
+    # Mount static assets (JS, CSS, etc.)
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(request: Request, full_path: str) -> FileResponse:
+        """Serve the SPA for all non-API routes."""
+        # Check if file exists in static dir
+        file_path = STATIC_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        # Fall back to index.html for SPA routing
+        return FileResponse(STATIC_DIR / "index.html")
+else:
+    @app.get("/")
+    def root() -> dict[str, str]:
+        """Root endpoint returning API info (when no frontend is built)."""
+        return {"name": "FilamentProfiles", "version": __version__}
