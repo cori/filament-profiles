@@ -5,8 +5,8 @@ import { machinesApi, platesApi, filamentsApi, profilesApi } from '../api'
 export default function Dashboard() {
   const machines = useQuery({ queryKey: ['machines'], queryFn: machinesApi.list })
   const plates = useQuery({ queryKey: ['plates'], queryFn: platesApi.list })
-  const filaments = useQuery({ queryKey: ['filaments'], queryFn: filamentsApi.list })
-  const profiles = useQuery({ queryKey: ['profiles'], queryFn: profilesApi.list })
+  const filaments = useQuery({ queryKey: ['filaments'], queryFn: () => filamentsApi.list() })
+  const profiles = useQuery({ queryKey: ['profiles'], queryFn: () => profilesApi.list() })
 
   const stats = [
     { name: 'Machines', count: machines.data?.length ?? 0, href: '/machines' },
