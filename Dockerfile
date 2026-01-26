@@ -21,10 +21,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Python dependencies
 COPY pyproject.toml README.md ./
+COPY src/ src/
 RUN pip install --no-cache-dir .
 
-# Copy application code
-COPY src/ src/
+# Copy alembic configuration
 COPY alembic/ alembic/
 COPY alembic.ini .
 
