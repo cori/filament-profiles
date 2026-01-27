@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { profilesApi, machinesApi, platesApi, filamentsApi, exportApi, type Profile } from '../api'
+import { profilesApi, machinesApi, platesApi, filamentsApi, exportApi, type Profile, type BulkDeleteResult } from '../api'
 
 const defaultFormData = {
   filament_id: 0,
@@ -27,6 +27,8 @@ export default function Profiles() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState(defaultFormData)
   const [showForm, setShowForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const { data: profiles, isLoading } = useQuery({
     queryKey: ['profiles'],
@@ -55,8 +57,56 @@ export default function Profiles() {
 
   const deleteMutation = useMutation({
     mutationFn: profilesApi.delete,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['profiles'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] })
+      setError(null)
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+    },
   })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: profilesApi.bulkDelete,
+    onSuccess: (result: BulkDeleteResult) => {
+      queryClient.invalidateQueries({ queryKey: ['profiles'] })
+      setSelectedIds(new Set())
+      if (result.failed.length > 0) {
+        const failedMessages = result.failed.map(f => `${f.id}: ${f.error}`).join('; ')
+        setError(`Some items could not be deleted: ${failedMessages}`)
+      } else {
+        setError(null)
+      }
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+    },
+  })
+
+  const toggleSelection = (id: number) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const toggleAll = () => {
+    if (selectedIds.size === profiles?.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(profiles?.map(p => p.id)))
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return
+    if (confirm(`Delete ${selectedIds.size} selected profile(s)?`)) {
+      bulkDeleteMutation.mutate(Array.from(selectedIds))
+    }
+  }
 
   const resetForm = () => {
     setFormData(defaultFormData)
@@ -123,14 +173,25 @@ export default function Profiles() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Print Profiles</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          disabled={!canCreate}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-          title={!canCreate ? 'Add machines, plates, and filaments first' : ''}
-        >
-          Add Profile
-        </button>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:bg-red-400"
+            >
+              Delete Selected ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            disabled={!canCreate}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            title={!canCreate ? 'Add machines, plates, and filaments first' : ''}
+          >
+            Add Profile
+          </button>
+        </div>
       </div>
 
       {!canCreate && (
@@ -138,6 +199,17 @@ export default function Profiles() {
           <p className="text-yellow-800">
             To create profiles, you need at least one machine, plate, and filament. Add them first.
           </p>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="flex justify-between items-center">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
+              &times;
+            </button>
+          </div>
         </div>
       )}
 
@@ -391,6 +463,14 @@ export default function Profiles() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-6 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={profiles?.length ? selectedIds.size === profiles.length : false}
+                  onChange={toggleAll}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filament</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Plate</th>
@@ -401,7 +481,15 @@ export default function Profiles() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {profiles?.map((profile) => (
-              <tr key={profile.id}>
+              <tr key={profile.id} className={selectedIds.has(profile.id) ? 'bg-blue-50' : ''}>
+                <td className="px-6 py-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(profile.id)}
+                    onChange={() => toggleSelection(profile.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     {profile.filament?.color_hex && (
@@ -443,7 +531,7 @@ export default function Profiles() {
             ))}
             {profiles?.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   No profiles yet. Add machines, plates, and filaments first, then create profiles.
                 </td>
               </tr>

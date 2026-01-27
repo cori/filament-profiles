@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from filamentprofiles import __version__
-from filamentprofiles.api import export, filaments, machines, plates, profiles
+from filamentprofiles.api import export, filaments, machines, plates, profiles, settings
 
 app = FastAPI(
     title="FilamentProfiles",
@@ -32,6 +32,7 @@ app.include_router(plates.router, prefix="/api/plates", tags=["plates"])
 app.include_router(filaments.router, prefix="/api/filaments", tags=["filaments"])
 app.include_router(profiles.router, prefix="/api/profiles", tags=["profiles"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
+app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/health")

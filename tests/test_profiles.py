@@ -186,3 +186,52 @@ class TestProfileEndpoints:
         profiles = response.json()
         assert len(profiles) == 1
         assert profiles[0]["machine_id"] == sample_profile["machine_id"]
+
+    def test_bulk_delete_profiles(
+        self,
+        client: TestClient,
+        sample_machine: dict,
+        sample_plate: dict,
+        sample_filament: dict,
+    ) -> None:
+        """Test bulk deleting profiles."""
+        # Create two profiles
+        f2 = client.post(
+            "/api/filaments",
+            json={"vendor": "Test", "material": "PETG", "name": "F2"},
+        ).json()
+
+        p1 = client.post(
+            "/api/profiles",
+            json={
+                "filament_id": sample_filament["id"],
+                "machine_id": sample_machine["id"],
+                "plate_id": sample_plate["id"],
+                "nozzle_temp": 200,
+                "bed_temp": 60,
+            },
+        ).json()
+
+        p2 = client.post(
+            "/api/profiles",
+            json={
+                "filament_id": f2["id"],
+                "machine_id": sample_machine["id"],
+                "plate_id": sample_plate["id"],
+                "nozzle_temp": 220,
+                "bed_temp": 70,
+            },
+        ).json()
+
+        response = client.post(
+            "/api/profiles/bulk-delete",
+            json={"ids": [p1["id"], p2["id"]]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["deleted"]) == 2
+        assert len(data["failed"]) == 0
+
+        # Verify they're gone
+        response = client.get("/api/profiles")
+        assert len(response.json()) == 0

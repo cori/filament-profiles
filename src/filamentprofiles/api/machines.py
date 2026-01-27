@@ -1,12 +1,12 @@
 """Machine API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from filamentprofiles.database import get_db
-from filamentprofiles.models import Machine
+from filamentprofiles.models import Machine, Profile
 from filamentprofiles.schemas import MachineCreate, MachineResponse, MachineUpdate
 
 router = APIRouter()
@@ -88,5 +88,46 @@ def delete_machine(machine_id: int, db: Session = Depends(get_db)) -> None:
     if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
 
+    # Check for dependent profiles
+    profile_count = db.execute(
+        select(Profile).where(Profile.machine_id == machine_id)
+    ).scalars().all()
+    if profile_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete machine: {len(profile_count)} profile(s) depend on it. Delete those profiles first.",
+        )
+
     db.delete(machine)
     db.commit()
+
+
+@router.post("/bulk-delete", status_code=200)
+def bulk_delete_machines(
+    ids: list[int] = Body(..., embed=True), db: Session = Depends(get_db)
+) -> dict:
+    """Delete multiple machines. Returns results for each ID."""
+    results = {"deleted": [], "failed": []}
+
+    for machine_id in ids:
+        machine = db.get(Machine, machine_id)
+        if not machine:
+            results["failed"].append({"id": machine_id, "error": "Machine not found"})
+            continue
+
+        # Check for dependent profiles
+        profiles = db.execute(
+            select(Profile).where(Profile.machine_id == machine_id)
+        ).scalars().all()
+        if profiles:
+            results["failed"].append({
+                "id": machine_id,
+                "error": f"{len(profiles)} profile(s) depend on this machine",
+            })
+            continue
+
+        db.delete(machine)
+        results["deleted"].append(machine_id)
+
+    db.commit()
+    return results

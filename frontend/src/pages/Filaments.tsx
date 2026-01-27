@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { filamentsApi, type Filament } from '../api'
+import { filamentsApi, type Filament, type BulkDeleteResult } from '../api'
 
 const defaultFormData = {
   vendor: '',
@@ -17,6 +17,8 @@ export default function Filaments() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [formData, setFormData] = useState(defaultFormData)
   const [showForm, setShowForm] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   const { data: filaments, isLoading } = useQuery({
     queryKey: ['filaments'],
@@ -41,7 +43,30 @@ export default function Filaments() {
 
   const deleteMutation = useMutation({
     mutationFn: filamentsApi.delete,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['filaments'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['filaments'] })
+      setError(null)
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+    },
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: filamentsApi.bulkDelete,
+    onSuccess: (result: BulkDeleteResult) => {
+      queryClient.invalidateQueries({ queryKey: ['filaments'] })
+      setSelectedIds(new Set())
+      if (result.failed.length > 0) {
+        const failedMessages = result.failed.map(f => `${f.id}: ${f.error}`).join('; ')
+        setError(`Some items could not be deleted: ${failedMessages}`)
+      } else {
+        setError(null)
+      }
+    },
+    onError: (err: Error) => {
+      setError(err.message)
+    },
   })
 
   const resetForm = () => {
@@ -73,19 +98,66 @@ export default function Filaments() {
     }
   }
 
+  const toggleSelection = (id: number) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(id)) {
+      newSelected.delete(id)
+    } else {
+      newSelected.add(id)
+    }
+    setSelectedIds(newSelected)
+  }
+
+  const toggleAll = () => {
+    if (selectedIds.size === filaments?.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filaments?.map(f => f.id)))
+    }
+  }
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return
+    if (confirm(`Delete ${selectedIds.size} selected filament(s)?`)) {
+      bulkDeleteMutation.mutate(Array.from(selectedIds))
+    }
+  }
+
   if (isLoading) return <div>Loading...</div>
 
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Filaments</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
-        >
-          Add Filament
-        </button>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 disabled:bg-red-400"
+            >
+              Delete Selected ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Add Filament
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+          <div className="flex justify-between items-center">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-white shadow rounded-lg p-6 mb-6">
@@ -162,7 +234,7 @@ export default function Filaments() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">Density (g/cm³)</label>
+                <label className="block text-sm font-medium text-gray-700">Density (g/cm3)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -199,6 +271,14 @@ export default function Filaments() {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-6 py-3 text-left">
+                <input
+                  type="checkbox"
+                  checked={filaments?.length ? selectedIds.size === filaments.length : false}
+                  onChange={toggleAll}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Color</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Material</th>
@@ -208,7 +288,15 @@ export default function Filaments() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {filaments?.map((filament) => (
-              <tr key={filament.id}>
+              <tr key={filament.id} className={selectedIds.has(filament.id) ? 'bg-blue-50' : ''}>
+                <td className="px-6 py-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(filament.id)}
+                    onChange={() => toggleSelection(filament.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center gap-2">
                     <div
@@ -238,7 +326,7 @@ export default function Filaments() {
             ))}
             {filaments?.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                   No filaments yet. Add one to get started.
                 </td>
               </tr>

@@ -4,6 +4,7 @@ import Machines from './pages/Machines'
 import Plates from './pages/Plates'
 import Filaments from './pages/Filaments'
 import Profiles from './pages/Profiles'
+import Settings from './pages/Settings'
 
 const navItems = [
   { path: '/', label: 'Dashboard' },
@@ -11,6 +12,7 @@ const navItems = [
   { path: '/plates', label: 'Plates' },
   { path: '/filaments', label: 'Filaments' },
   { path: '/profiles', label: 'Profiles' },
+  { path: '/settings', label: 'Settings' },
 ]
 
 function App() {
@@ -52,6 +54,7 @@ function App() {
           <Route path="/plates" element={<Plates />} />
           <Route path="/filaments" element={<Filaments />} />
           <Route path="/profiles" element={<Profiles />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
     </div>
