@@ -90,6 +90,11 @@ export interface Profile {
   plate?: Plate
 }
 
+export interface BulkDeleteResult {
+  deleted: number[]
+  failed: { id: number; error: string }[]
+}
+
 // Machine API
 export const machinesApi = {
   list: () => fetchApi<Machine[]>('/machines'),
@@ -97,6 +102,7 @@ export const machinesApi = {
   create: (data: Partial<Machine>) => fetchApi<Machine>('/machines', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Machine>) => fetchApi<Machine>(`/machines/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) => fetchApi<void>(`/machines/${id}`, { method: 'DELETE' }),
+  bulkDelete: (ids: number[]) => fetchApi<BulkDeleteResult>('/machines/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
 }
 
 // Plate API
@@ -106,6 +112,7 @@ export const platesApi = {
   create: (data: Partial<Plate>) => fetchApi<Plate>('/plates', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Plate>) => fetchApi<Plate>(`/plates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) => fetchApi<void>(`/plates/${id}`, { method: 'DELETE' }),
+  bulkDelete: (ids: number[]) => fetchApi<BulkDeleteResult>('/plates/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
 }
 
 // Filament API
@@ -121,6 +128,7 @@ export const filamentsApi = {
   create: (data: Partial<Filament>) => fetchApi<Filament>('/filaments', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Filament>) => fetchApi<Filament>(`/filaments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) => fetchApi<void>(`/filaments/${id}`, { method: 'DELETE' }),
+  bulkDelete: (ids: number[]) => fetchApi<BulkDeleteResult>('/filaments/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
 }
 
 // Profile API
@@ -137,6 +145,7 @@ export const profilesApi = {
   create: (data: Partial<Profile>) => fetchApi<Profile>('/profiles', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: Partial<Profile>) => fetchApi<Profile>(`/profiles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) => fetchApi<void>(`/profiles/${id}`, { method: 'DELETE' }),
+  bulkDelete: (ids: number[]) => fetchApi<BulkDeleteResult>('/profiles/bulk-delete', { method: 'POST', body: JSON.stringify({ ids }) }),
   clone: (id: number, data: { machine_id?: number; plate_id?: number }) =>
     fetchApi<Profile>(`/profiles/${id}/clone`, { method: 'POST', body: JSON.stringify(data) }),
 }
@@ -146,4 +155,33 @@ export const exportApi = {
   profileUrl: (id: number) => `${API_BASE}/export/profile/${id}`,
   machineUrl: (id: number) => `${API_BASE}/export/machine/${id}`,
   previewProfile: (id: number) => fetchApi<Record<string, unknown>>(`/export/profile/${id}/preview`),
+}
+
+// Settings types
+export interface Settings {
+  spoolman_url: string | null
+  spoolman_connected: boolean
+}
+
+export interface SpoolmanStatus {
+  connected: boolean
+  version: string | null
+  error: string | null
+}
+
+export interface SpoolmanFilament {
+  id: number
+  name: string | null
+  vendor_name: string | null
+  material: string | null
+  color_hex: string | null
+  density: number | null
+  diameter: number | null
+}
+
+// Settings API
+export const settingsApi = {
+  get: () => fetchApi<Settings>('/settings'),
+  getSpoolmanStatus: () => fetchApi<SpoolmanStatus>('/settings/spoolman/status'),
+  getSpoolmanFilaments: () => fetchApi<SpoolmanFilament[]>('/settings/spoolman/filaments'),
 }

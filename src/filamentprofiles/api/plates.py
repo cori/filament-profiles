@@ -1,12 +1,12 @@
 """Plate API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from slugify import slugify
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from filamentprofiles.database import get_db
-from filamentprofiles.models import Plate
+from filamentprofiles.models import Plate, Profile
 from filamentprofiles.schemas import PlateCreate, PlateResponse, PlateUpdate
 
 router = APIRouter()
@@ -83,5 +83,47 @@ def delete_plate(plate_id: int, db: Session = Depends(get_db)) -> None:
     if not plate:
         raise HTTPException(status_code=404, detail="Plate not found")
 
+    # Check for dependent profiles
+    profile_count = db.execute(
+        select(Profile).where(Profile.plate_id == plate_id)
+    ).scalars().all()
+    if profile_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete plate: {len(profile_count)} profile(s) depend on it. "
+            "Delete those profiles first.",
+        )
+
     db.delete(plate)
     db.commit()
+
+
+@router.post("/bulk-delete", status_code=200)
+def bulk_delete_plates(
+    ids: list[int] = Body(..., embed=True), db: Session = Depends(get_db)
+) -> dict:
+    """Delete multiple plates. Returns results for each ID."""
+    results = {"deleted": [], "failed": []}
+
+    for plate_id in ids:
+        plate = db.get(Plate, plate_id)
+        if not plate:
+            results["failed"].append({"id": plate_id, "error": "Plate not found"})
+            continue
+
+        # Check for dependent profiles
+        profiles = db.execute(
+            select(Profile).where(Profile.plate_id == plate_id)
+        ).scalars().all()
+        if profiles:
+            results["failed"].append({
+                "id": plate_id,
+                "error": f"{len(profiles)} profile(s) depend on this plate",
+            })
+            continue
+
+        db.delete(plate)
+        results["deleted"].append(plate_id)
+
+    db.commit()
+    return results

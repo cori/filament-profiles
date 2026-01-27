@@ -120,3 +120,86 @@ class TestFilamentEndpoints:
         filaments = response.json()
         assert len(filaments) == 1
         assert filaments[0]["material"] == "PETG"
+
+    def test_delete_filament_with_profiles(
+        self,
+        client: TestClient,
+        sample_machine: dict,
+        sample_plate: dict,
+        sample_filament: dict,
+    ) -> None:
+        """Test deleting a filament that has profiles should fail."""
+        # Create a profile using this filament
+        client.post(
+            "/api/profiles",
+            json={
+                "filament_id": sample_filament["id"],
+                "machine_id": sample_machine["id"],
+                "plate_id": sample_plate["id"],
+                "nozzle_temp": 200,
+                "bed_temp": 60,
+            },
+        )
+
+        # Try to delete the filament
+        response = client.delete(f"/api/filaments/{sample_filament['id']}")
+        assert response.status_code == 409
+        assert "profile" in response.json()["detail"].lower()
+
+    def test_bulk_delete_filaments(self, client: TestClient) -> None:
+        """Test bulk deleting filaments."""
+        f1 = client.post(
+            "/api/filaments",
+            json={"vendor": "Test", "material": "PLA", "name": "F1"},
+        ).json()
+        f2 = client.post(
+            "/api/filaments",
+            json={"vendor": "Test", "material": "PLA", "name": "F2"},
+        ).json()
+
+        response = client.post(
+            "/api/filaments/bulk-delete",
+            json={"ids": [f1["id"], f2["id"]]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["deleted"]) == 2
+        assert len(data["failed"]) == 0
+
+    def test_bulk_delete_filaments_with_profiles(
+        self,
+        client: TestClient,
+        sample_machine: dict,
+        sample_plate: dict,
+        sample_filament: dict,
+    ) -> None:
+        """Test bulk delete where some filaments have profiles."""
+        # Create another filament without profiles
+        f2 = client.post(
+            "/api/filaments",
+            json={"vendor": "Test", "material": "PLA", "name": "F2"},
+        ).json()
+
+        # Create a profile using sample_filament
+        client.post(
+            "/api/profiles",
+            json={
+                "filament_id": sample_filament["id"],
+                "machine_id": sample_machine["id"],
+                "plate_id": sample_plate["id"],
+                "nozzle_temp": 200,
+                "bed_temp": 60,
+            },
+        )
+
+        # Try to bulk delete both
+        response = client.post(
+            "/api/filaments/bulk-delete",
+            json={"ids": [sample_filament["id"], f2["id"]]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["deleted"]) == 1
+        assert f2["id"] in data["deleted"]
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["id"] == sample_filament["id"]

@@ -1,6 +1,6 @@
 """Profile API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -195,6 +195,26 @@ def delete_profile(profile_id: int, db: Session = Depends(get_db)) -> None:
 
     db.delete(profile)
     db.commit()
+
+
+@router.post("/bulk-delete", status_code=200)
+def bulk_delete_profiles(
+    ids: list[int] = Body(..., embed=True), db: Session = Depends(get_db)
+) -> dict:
+    """Delete multiple profiles. Returns results for each ID."""
+    results = {"deleted": [], "failed": []}
+
+    for profile_id in ids:
+        profile = db.get(Profile, profile_id)
+        if not profile:
+            results["failed"].append({"id": profile_id, "error": "Profile not found"})
+            continue
+
+        db.delete(profile)
+        results["deleted"].append(profile_id)
+
+    db.commit()
+    return results
 
 
 @router.post("/{profile_id}/clone", response_model=ProfileResponse, status_code=201)

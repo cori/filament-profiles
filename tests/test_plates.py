@@ -59,3 +59,77 @@ class TestPlateEndpoints:
 
         response = client.get(f"/api/plates/{sample_plate['id']}")
         assert response.status_code == 404
+
+    def test_delete_plate_with_profiles(
+        self,
+        client: TestClient,
+        sample_machine: dict,
+        sample_plate: dict,
+        sample_filament: dict,
+    ) -> None:
+        """Test deleting a plate that has profiles should fail."""
+        # Create a profile using this plate
+        client.post(
+            "/api/profiles",
+            json={
+                "filament_id": sample_filament["id"],
+                "machine_id": sample_machine["id"],
+                "plate_id": sample_plate["id"],
+                "nozzle_temp": 200,
+                "bed_temp": 60,
+            },
+        )
+
+        # Try to delete the plate
+        response = client.delete(f"/api/plates/{sample_plate['id']}")
+        assert response.status_code == 409
+        assert "profile" in response.json()["detail"].lower()
+
+    def test_bulk_delete_plates(self, client: TestClient) -> None:
+        """Test bulk deleting plates."""
+        plate1 = client.post("/api/plates", json={"name": "Plate 1"}).json()
+        plate2 = client.post("/api/plates", json={"name": "Plate 2"}).json()
+
+        response = client.post(
+            "/api/plates/bulk-delete",
+            json={"ids": [plate1["id"], plate2["id"]]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["deleted"]) == 2
+        assert len(data["failed"]) == 0
+
+    def test_bulk_delete_plates_with_profiles(
+        self,
+        client: TestClient,
+        sample_machine: dict,
+        sample_plate: dict,
+        sample_filament: dict,
+    ) -> None:
+        """Test bulk delete where some plates have profiles."""
+        # Create another plate without profiles
+        plate2 = client.post("/api/plates", json={"name": "Plate 2"}).json()
+
+        # Create a profile using sample_plate
+        client.post(
+            "/api/profiles",
+            json={
+                "filament_id": sample_filament["id"],
+                "machine_id": sample_machine["id"],
+                "plate_id": sample_plate["id"],
+                "nozzle_temp": 200,
+                "bed_temp": 60,
+            },
+        )
+
+        # Try to bulk delete both
+        response = client.post(
+            "/api/plates/bulk-delete",
+            json={"ids": [sample_plate["id"], plate2["id"]]},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["deleted"]) == 1
+        assert plate2["id"] in data["deleted"]
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["id"] == sample_plate["id"]

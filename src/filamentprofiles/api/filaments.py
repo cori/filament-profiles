@@ -1,11 +1,11 @@
 """Filament API endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from filamentprofiles.database import get_db
-from filamentprofiles.models import Filament
+from filamentprofiles.models import Filament, Profile
 from filamentprofiles.schemas import FilamentCreate, FilamentResponse, FilamentUpdate
 
 router = APIRouter()
@@ -96,5 +96,47 @@ def delete_filament(filament_id: int, db: Session = Depends(get_db)) -> None:
     if not filament:
         raise HTTPException(status_code=404, detail="Filament not found")
 
+    # Check for dependent profiles
+    profile_count = db.execute(
+        select(Profile).where(Profile.filament_id == filament_id)
+    ).scalars().all()
+    if profile_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete filament: {len(profile_count)} profile(s) depend on it. "
+            "Delete those profiles first.",
+        )
+
     db.delete(filament)
     db.commit()
+
+
+@router.post("/bulk-delete", status_code=200)
+def bulk_delete_filaments(
+    ids: list[int] = Body(..., embed=True), db: Session = Depends(get_db)
+) -> dict:
+    """Delete multiple filaments. Returns results for each ID."""
+    results = {"deleted": [], "failed": []}
+
+    for filament_id in ids:
+        filament = db.get(Filament, filament_id)
+        if not filament:
+            results["failed"].append({"id": filament_id, "error": "Filament not found"})
+            continue
+
+        # Check for dependent profiles
+        profiles = db.execute(
+            select(Profile).where(Profile.filament_id == filament_id)
+        ).scalars().all()
+        if profiles:
+            results["failed"].append({
+                "id": filament_id,
+                "error": f"{len(profiles)} profile(s) depend on this filament",
+            })
+            continue
+
+        db.delete(filament)
+        results["deleted"].append(filament_id)
+
+    db.commit()
+    return results
