@@ -1,6 +1,5 @@
 """Export API endpoints for slicer profiles."""
 
-import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException

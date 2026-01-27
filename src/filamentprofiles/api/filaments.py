@@ -103,7 +103,8 @@ def delete_filament(filament_id: int, db: Session = Depends(get_db)) -> None:
     if profile_count:
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot delete filament: {len(profile_count)} profile(s) depend on it. Delete those profiles first.",
+            detail=f"Cannot delete filament: {len(profile_count)} profile(s) depend on it. "
+            "Delete those profiles first.",
         )
 
     db.delete(filament)
